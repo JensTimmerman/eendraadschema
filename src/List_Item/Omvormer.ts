@@ -17,10 +17,14 @@ export class Omvormer extends Electro_Item {
         this.props.adres = "";
         this.props.inkring = false;
         this.props.micro = false;
+        this.props.type_ingang = "AC";
+        this.props.type_uitgang = "DC";
+        this.props.tekst = "";
+        this.props.details = "Merk: ___|Type: ___|S/N: ___|P: ___kW (DC)|P: ___kW (AC)";
     }
 
     allowedChilds() : Array<string> { // returns an array with the type-names of allowed childs
-        return ["", "Aansluiting", "Domotica", "Domotica module (verticaal)", "Domotica gestuurde verbruiker", "Leiding", "Meerdere verbruikers", "Splitsing", "---", "Batterij", "Bel", "Boiler", "Contactdoos", "Diepvriezer", "Droogkast", "Drukknop", "Elektriciteitsmeter", "Elektrische oven", "EV lader", "Ketel", "Koelkast", "Kookfornuis", "Lichtcircuit", "Lichtpunt", "Media", "Microgolfoven", "Motor", "Omvormer", "Overspanningsbeveiliging", "Schakelaars", "Stoomoven", "Transformator", "USB lader", "Vaatwasmachine", "Ventilator", "Verlenging", "Verwarmingstoestel", "Verbruiker", "Vrije tekst", "Warmtepomp/airco", "Wasmachine", "Zekering/differentieel", "Zonnepaneel", "---", "Aansluitpunt", "Aftakdoos", "Zeldzame symbolen"];
+        return ["", "Aansluiting", "Domotica", "Domotica module (verticaal)", "Domotica gestuurde verbruiker", "Leiding", "Meerdere verbruikers", "Splitsing", "Klemmenstrook", "---", "Batterij", "Bel", "Boiler", "Contactdoos", "Diepvriezer", "Droogkast", "Drukknop", "Elektriciteitsmeter", "Elektrische oven", "EV lader", "Ketel", "Koelkast", "Kookfornuis", "Lichtcircuit", "Lichtpunt", "Media", "Microgolfoven", "Motor", "Omvormer", "Omschakelaar", "Overspanningsbeveiliging", "Schakelaars", "Stoomoven", "Transformator", "USB lader", "Vaatwasmachine", "Ventilator", "Verlenging", "Verwarmingstoestel", "Verbruiker", "Vrije tekst", "Warmtepomp/airco", "Wasmachine", "Zekering/differentieel", "Zonnepaneel", "---", "Aansluitpunt", "Aftakdoos", "Zeldzame symbolen"];
     }
 
     getMaxNumChilds(): number {
@@ -37,6 +41,7 @@ export class Omvormer extends Electro_Item {
         if (this.props.micro && this.getNumChilds() > 1) {
             this.props.micro = false;
         }
+        if (this.props.details == null) this.props.details = "";
     }
 
     toHTML(mode: string) {
@@ -53,10 +58,28 @@ export class Omvormer extends Electro_Item {
             output += "Micro: " + this.checkboxPropToHTML('micro') + ", ";
         }
         
-        output += "Tekst: " + this.stringPropToHTML('tekst',10) + ", ";
+        output += "Ingang: " + this.selectPropToHTML('type_ingang',["AC","DC"]) + ", ";
+        output += "Uitgang: " + this.selectPropToHTML('type_uitgang',["AC","DC"]) + ", ";
+        output += "Tekst in object: " + this.stringPropToHTML('tekst',10) + ", ";
+        output += 'Tekst onder object (nieuwe lijn = "|"): ' + this.stringPropToHTML('details',25) + ", ";
         output += "Adres/tekst: " + this.stringPropToHTML('adres',5);
 
         return(output);
+    }
+
+    addLegendToSVG(mySVG: SVGelement) {
+        let lines = htmlspecialchars(this.props.details).split("|");
+        let maxWidth = 0;
+        for (let line of lines) maxWidth = Math.max(maxWidth, svgTextWidth(htmlspecialchars(line),10,'') + 15);
+        let offset = 15 * Math.max(lines.length,0);
+        let addresOffset = 0;
+        if (trimString(this.props.adres) !== "") addresOffset += 15;
+        mySVG.ydown += offset;
+        mySVG.xright = Math.max(mySVG.xright, maxWidth);
+        for (let line of lines) {
+            mySVG.data += '<text x="20" y="' + (mySVG.yup + mySVG.ydown - offset + 10 + addresOffset) + '" style="text-anchor:left;fill:black" font-family="Arial, Helvetica, sans-serif" font-size="10">' + line + '</text>';
+            offset -= 15;
+        }
     }
 
     toSVG(sitplan = false) {
@@ -64,7 +87,6 @@ export class Omvormer extends Electro_Item {
 
         if (sitplan) {
             SVGSymbols.addSymbol('sinus');
-            SVGSymbols.addSymbol('omvormer');
 
             mySVG.yup = 25;
             mySVG.ydown = 25;
@@ -72,7 +94,16 @@ export class Omvormer extends Electro_Item {
             mySVG.xleft = 1; // foresee at least some space for the conductor
             mySVG.xright = 59;
 
-            mySVG.data += '<use xlink:href="#omvormer" x="21" y="25"></use>';
+            if ( (this.props.type_ingang == "AC") && (this.props.type_uitgang == "AC") ) {
+                SVGSymbols.addSymbol('omvormer_AC_AC');
+                mySVG.data += '<use xlink:href="#omvormer_AC_AC" x="21" y="25"></use>';
+            } else if ( (this.props.type_ingang == "DC") && (this.props.type_uitgang == "DC") ) {
+                SVGSymbols.addSymbol('omvormer_DC_DC');
+                mySVG.data += '<use xlink:href="#omvormer_DC_DC" x="21" y="25"></use>';
+            } else {
+                SVGSymbols.addSymbol('omvormer_AC_DC');
+                mySVG.data += '<use xlink:href="#omvormer_AC_DC" x="21" y="25"></use>';
+            }
 
             return(mySVG);            
         }
@@ -146,13 +177,53 @@ export class Omvormer extends Electro_Item {
                 + text + '</text>';
         }
 
-        // Symbolen toevoegen voor wisselstroom en gelijkstroom
+        // Symbolen toevoegen voor wisselstroom en gelijkstroom aan de ingang
 
-        mySVG.data += `<use xlink:href="#sinusVerticaal" x="30" y="${5+height/2+rectangleHeight/2-10-10}" />` 
-                   +  `<line x1="66" y1="${12 + (height-rectangleHeight)/2}" x2="66" y2="${27 + (height-rectangleHeight)/2}" stroke="black" stroke-dasharray="3" />` 
-                   +  `<line x1="62" y1="${12 + (height-rectangleHeight)/2}" x2="62" y2="${27 + (height-rectangleHeight)/2}" stroke="black" />`;
+        let symbolY = 5 + height/2 + rectangleHeight/2 - 10 - 8;
+        let symbolX = 30;
 
-        mySVG.data += this.addAddressToSVG(mySVG,height+10,15,(70-mySVG.xright)/2-1);
+        switch (this.props.type_ingang) {
+            case "AC":
+                mySVG.data += `<use xlink:href="#sinusVerticaal" x="${symbolX}" y="${symbolY}" />`;
+                break;
+            case "DC":
+                mySVG.data += `<line x1="${symbolX+2}" y1="${symbolY-7.5-10}" x2="${symbolX+2}" y2="${symbolY+7.5-10}" stroke="black" stroke-dasharray="3" />`
+                           +  `<line x1="${symbolX-2}" y1="${symbolY-7.5-10}" x2="${symbolX-2}" y2="${symbolY+7.5-10}" stroke="black" />`;
+                break;
+        }
+
+        // Symbolen toevoegen voor wisselstroom en gelijkstroom aan de uitgang
+
+        symbolY = 12 + (height-rectangleHeight)/2 + 10 + 12;
+        symbolX = 64;
+
+        switch (this.props.type_uitgang) {
+            case "AC":
+                mySVG.data += `<use xlink:href="#sinusVerticaal" x="${symbolX}" y="${symbolY}" />`;
+                break;
+            case "DC":
+                mySVG.data += `<line x1="${symbolX+2}" y1="${symbolY-7.5-10}" x2="${symbolX+2}" y2="${symbolY+7.5-10}" stroke="black" stroke-dasharray="3" />`
+                           +  `<line x1="${symbolX-2}" y1="${symbolY-7.5-10}" x2="${symbolX-2}" y2="${symbolY+7.5-10}" stroke="black" />`;
+                break;
+        }
+
+        if (trimString(this.props.details) !== "") this.addLegendToSVG(mySVG);
+
+        if ((this.props.adres !== null) && (trimString(this.props.adres) !== "")) {
+            let textX = 45;
+            const textY = height + 10;
+            const fontSize = 10;
+            const padding = 2;
+            const textWidth = svgTextWidth(htmlspecialchars(this.props.adres), fontSize, 'font-style:italic');
+            if (textWidth > 50) textX += (textWidth-50)/2;
+            mySVG.data += '<text x="' + textX + '" y="' + textY + '" style="text-anchor:middle; fill:black; font-style:italic" font-family="Arial, Helvetica, sans-serif" font-size="10">' + htmlspecialchars(this.props.adres) + '</text>';
+            mySVG.ydown += 15;
+            mySVG.xright = Math.max(mySVG.xright, textX + textWidth/2 + padding);
+        }
+
+        if (this.heeftVerbruikerAlsKind() && this.getNumChilds() == 0) {
+            mySVG.data += `<line x1="70" y1="${mySVG.yup}" x2="${mySVG.xright+mySVG.xleft+1}" y2="${mySVG.yup}" stroke="black" />`;
+        }
 
         return(mySVG);
 

@@ -21,6 +21,7 @@ import { Elektrische_oven } from "./List_Item/Elektrische_oven";
 import { EV_lader } from "./List_Item/EV_lader";
 import { Ketel } from "./List_Item/Ketel";
 import { Koelkast } from "./List_Item/Koelkast";
+import { Klemmenstrook } from "./List_Item/Klemmenstrook";
 import { Kookfornuis } from "./List_Item/Kookfornuis";
 import { Kring } from "./List_Item/Kring";
 import { Leiding } from "./List_Item/Leiding";
@@ -30,6 +31,7 @@ import { Media } from "./List_Item/Media";
 import { Meerdere_verbruikers } from "./List_Item/Meerdere_verbruikers";
 import { Microgolfoven } from "./List_Item/Microgolfoven";
 import { Motor } from "./List_Item/Motor";
+import { Omschakelaar } from "./List_Item/Omschakelaar";
 import { Omvormer } from "./List_Item/Omvormer";
 import { Overspanningsbeveiliging } from "./List_Item/Overspanningsbeveiliging";
 import { Lichtcircuit } from "./List_Item/Schakelaars/Lichtcircuit";
@@ -374,6 +376,7 @@ export class Hierarchical_List {
             case 'Koelkast': tempval = new Koelkast(this); break;
             case 'Kookfornuis': tempval = new Kookfornuis(this); break;
             case 'Kring': tempval = new Kring(this); break;
+            case 'Klemmenstrook': tempval = new Klemmenstrook(this); break;
             case 'Leiding': tempval = new Leiding(this); break;
             case 'Lichtcircuit': tempval = new Lichtcircuit(this); break;
             case 'Lichtpunt': tempval = new Lichtpunt(this); break;
@@ -382,6 +385,7 @@ export class Hierarchical_List {
             case 'Microgolfoven': tempval = new Microgolfoven(this); break;
             case 'Motor': tempval = new Motor(this); break;
             case 'Omvormer': tempval = new Omvormer(this); break;
+            case 'Omschakelaar': tempval = new Omschakelaar(this); break;
             case 'Overspanningsbeveiliging': tempval = new Overspanningsbeveiliging(this); break;
             case 'Schakelaars': tempval = new Schakelaars(this); break;
             case 'Splitsing': tempval = new Splitsing(this); break;
@@ -666,7 +670,7 @@ export class Hierarchical_List {
                     if (this.active[i] && (this.data[i].parent == parent.id)) lastOrdinalInKring = i;
                 }
 
-                if ( (item.getType() == "Omvormer") && (item.props.inkring) ) {
+                if ( (item.getType() == "Omschakelaar") || ( (item.getType() == "Omvormer") && (item.props.inkring) ) ) {
 
                     //if (myOrdinal < lastOrdinalInKring)
                     mySVG.data += '<line x1="' + mySVG.xleft + '" x2="' + mySVG.xleft + '" y1="' + 0 + '" y2="' + (mySVG.yup-5+0.5) + '" stroke="black" />'
@@ -697,7 +701,7 @@ export class Hierarchical_List {
                 displaynr = item.props.nr;
                 let posx = mySVG.xleft+9;
                 let posy = mySVG.yup-5;
-                if ( (item.getType() == "Omvormer") && (item.props.inkring) ) posy -= 5;
+                if ( (item.getType() == "Omschakelaar") || ( (item.getType() == "Omvormer") && (item.props.inkring) ) ) posy -= 5;
                 
                 mySVG.data +=
                   '<text x="' + (posx) + '" y="' + (posy) + '" ' +
@@ -1109,7 +1113,7 @@ export class Hierarchical_List {
 
         // Nu gaan we doorheen alle items en passen we de nummers aan indien nodig
         let lastNumbers: { [kring: string]: number } = {}; // Object to keep track of last numbers for each type
-        let itemsZonderNr: Array<string> = ["", "Bord", "Kring", "Splitsing"];
+        let itemsZonderNr: Array<string> = ["", "Bord", "Kring", "Splitsing", "Klemmenstrook"];
         
         for (let i = 0; i<this.length; i++) {
             if (!this.active[i]) continue;
@@ -1180,6 +1184,7 @@ export class Hierarchical_List {
                         break;
 
                     case "Splitsing":
+                    case "Klemmenstrook":
                         inSVG[elementCounter] = this.data[i].toSVG();
                         break;
 
@@ -1203,6 +1208,7 @@ export class Hierarchical_List {
                         break; 
 
                     case "Omvormer":
+                    case "Omschakelaar":
                         inSVG[elementCounter] = this.data[i].toSVG(); //Maak de tekening
                         this.tekenVerticaleLijnIndienKindVanKring(this.data[i] as Electro_Item,inSVG[elementCounter]);         
                         break;
@@ -1337,6 +1343,7 @@ export class Hierarchical_List {
                 if (parentItem != null && parentItem.getType() == "Kring") max_xright += 10; // Altijd 10 extra rechts voorzien voor uitstekende tekst/adressen
 
                 if (!(this.getElectroItemById(myParent) instanceof Omvormer) && 
+                    !(this.getElectroItemById(myParent) instanceof Omschakelaar) && 
                     !(this.getElectroItemById(myParent) instanceof Aftakdoos)) {
                     outSVG.xright = Math.max(max_xright,25); // foresee at least 25 at the right
                 } else {
