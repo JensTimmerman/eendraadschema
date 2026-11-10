@@ -241,6 +241,12 @@ schakelaar_wissel_dubbel: `
 aansluitpunt: `
 <circle cx="5" cy="0" r="5" style="stroke:black;fill:none" />
 `,
+leftcircle: `
+<path d="M 5 5 A 5 5 0 0 1 5 -5" fill="none" stroke="black" />
+`,
+rightcircle: `
+<path d="M 5 -5 A 5 5 0 0 1 5 5" style="stroke:black;fill:none" />
+`,
 aftakdoos: `
 <circle cx="15" cy="0" r="15" style="stroke:black;fill:none" />
 <circle cx="15" cy="0" r="7.5" style="stroke:black;fill:black" />
@@ -386,6 +392,36 @@ omvormer: `
 <use xlink:href="#sinus" x="5" y="-12" />"
 <line x1="20" y1="10" x2="35" y2="10" stroke="black" />
 <line x1="20" y1="13" x2="35" y2="13" stroke="black" stroke-dasharray="3" />
+`,
+omvormer_AC_DC: `
+<rect x="0" y="-20" width="40" height="40" fill="none" style="stroke:black" />
+<line x1="0" y1="20" x2="40" y2="-20" stroke="black" />
+<use xlink:href="#sinus" x="5" y="-12" />
+<line x1="20" y1="10" x2="35" y2="10" stroke="black" />
+<line x1="20" y1="13" x2="35" y2="13" stroke="black" stroke-dasharray="3" />
+`,
+omvormer_AC_AC: `
+<rect x="0" y="-20" width="40" height="40" fill="none" style="stroke:black" />
+<line x1="0" y1="20" x2="40" y2="-20" stroke="black" />
+<use xlink:href="#sinus" x="5" y="-12" />
+<use xlink:href="#sinus" x="15" y="12" />
+`,
+omvormer_DC_DC: `
+<rect x="0" y="-20" width="40" height="40" fill="none" style="stroke:black" />
+<line x1="0" y1="20" x2="40" y2="-20" stroke="black" />
+<line x1="5" y1="-13" x2="20" y2="-13" stroke="black" />
+<line x1="5" y1="-10" x2="20" y2="-10" stroke="black" stroke-dasharray="3" />
+<line x1="20" y1="10" x2="35" y2="10" stroke="black" />
+<line x1="20" y1="13" x2="35" y2="13" stroke="black" stroke-dasharray="3" />
+`,
+omschakelaar: `
+<circle cx="20" cy="-5" r="2" fill="black" stroke="black" />
+<circle cx="13" cy="5" r="2" fill="black" stroke="black" />
+<circle cx="27" cy="5" r="2" fill="black" stroke="black" />
+<line x1="20" y1="-5" x2="13" y2="5" stroke="black" />
+<line x1="-5" y1="5" x2="13" y2="5" stroke="black" />
+<line x1="-5" y1="-5" x2="20" y2="-5" stroke="black" />
+<line x1="45" y1="5" x2="27" y2="5" stroke="black" />
 `,
 overspanningsbeveiliging: `
 <rect x="0" y="-15" width="15" height="30" fill="none" style="stroke:black" />

@@ -53,6 +53,9 @@ export class Aansluiting extends Electro_Item {
         this.props.fase = '';
         this.props.normaalGesloten = false;
         this.props.newPage = false;
+        this.props.kabel_locatie = "N/A";
+        this.props.kabel_is_in_buis = false;
+        this.props.details = "";
     }
 
     allowedChilds() : Array<string> { // returns an array with the type-names of allowed childs
@@ -94,6 +97,8 @@ export class Aansluiting extends Electro_Item {
         if (typeof(this.props.huishoudelijk) == 'undefined') this.props.huishoudelijk = true;
         if (!["automatisch", "differentieel", "differentieelautomaat", "smelt"].includes(this.props.bescherming)) this.props.fase = '';
         if (!["automatisch", "differentieel", "differentieelautomaat"].includes(this.props.bescherming)) this.props.kortsluitvermogen = '';
+        if (this.props.kabel_locatie == "Luchtleiding") this.props.kabel_is_in_buis = false;
+        if (this.props.details == null) this.props.details = "";
     }
 
     toHTML(mode: string) {
@@ -148,7 +153,9 @@ export class Aansluiting extends Electro_Item {
         }
 
         output += ", Kabeltype na teller: " + this.stringPropToHTML('type_kabel_na_teller',10)
-               +  ", Kabeltype v&oacute;&oacute;r teller: " + this.stringPropToHTML('type_kabel_voor_teller',10);
+               +  ", Kabeltype v&oacute;&oacute;r teller: " + this.stringPropToHTML('type_kabel_voor_teller',10)
+               +  ", Plaatsing: " + this.selectPropToHTML('kabel_locatie',["N/A","Ondergronds","Luchtleiding","In wand","Op wand"]);
+        if (this.props.kabel_locatie != "Luchtleiding") output += ", In buis: " + this.checkboxPropToHTML('kabel_is_in_buis');
 
         if ((this.props.kortsluitvermogen != '') && (['differentieel','automatisch','differentieelautomaat'].includes(this.props.bescherming))) {
             output += ", Huishoudelijke installatie: " + this.checkboxPropToHTML('huishoudelijk');
@@ -165,7 +172,23 @@ export class Aansluiting extends Electro_Item {
 
         output += ", Adres/tekst: " + this.stringPropToHTML('adres',5);
 
+        output += ', Tekst onder object (nieuwe lijn = "|"): ' + this.stringPropToHTML('details',25);
+
         return(output);
+    }
+
+    addLegendToSVG(mySVG: SVGelement, shiftx: number = 0): number {
+        let lines = htmlspecialchars(this.props.details).split("|");
+        let maxWidth = 0;
+        for (let line of lines) maxWidth = Math.max(maxWidth, svgTextWidth(htmlspecialchars(line),10,'') + 15);
+        let offset = 15 * Math.max(lines.length,0);
+        mySVG.ydown += offset;
+        for (let line of lines) {
+            mySVG.data += `<text x="${20+shiftx}" y="${mySVG.yup+mySVG.ydown-offset+10}" style="text-anchor:left;fill:black" font-family="Arial, Helvetica, sans-serif" font-size="10">` + line + `</text>`;
+            offset -= 15;
+        }
+        mySVG.ydown += 5;
+        return maxWidth;
     }
 
     toSVG(sitplan = false): SVGelement {
@@ -478,6 +501,13 @@ export class Aansluiting extends Electro_Item {
                 break;
         }
 
+        // Extra verticale lijn indien kabel-locatie getoond wordt
+        let cableLocationVisible = (['Ondergronds', 'In wand', 'Op wand'].includes(this.props.kabel_locatie)) || this.props.kabel_is_in_buis;
+        if (cableLocationVisible) {
+            mySVG.yup += 15;
+            mySVG.data += '<line x1="' + mySVG.xleft + '" y1="' + mySVG.yup + '" x2="' + mySVG.xleft + '" y2="' + (mySVG.yup-15) + '" stroke="black" stroke-linecap="round"></line>';
+        }
+
         // Leiding helemaal links onderaan vóór de teller
         mySVG.data += '<line x1="1" ' + 'y1="' + (mySVG.yup+25) + '" x2="' + (21+extrashift)  + '" '+ 'y2="' + (mySVG.yup+25) + '" stroke="black"></line>';
 
@@ -495,8 +525,44 @@ export class Aansluiting extends Electro_Item {
         mySVG.data += '<line x1="' + (61+extrashift) + '" ' + 'y1="' + (mySVG.yup+25) + '" x2="' + (mySVG.xleft) + '" '+ 'y2="' + (mySVG.yup+25) + '" stroke="black"></line>'
         +  '<line x1="' + (mySVG.xleft) + '" y1="' + (mySVG.yup) + '" x2="' + (mySVG.xleft) + '" ' + 'y2="' + (mySVG.yup+25) + '" stroke="black"></line>';
 
+        // Symbolen voor kabel-locatie na de teller
+        let cableLocationX = 61 + extrashift;
+        if ( (this.props.kabel_is_in_buis) && (this.props.kabel_locatie != "Luchtleiding") ) {
+            mySVG.data += `<circle cx="${cableLocationX+50}" cy="${mySVG.yup+15}" r="4" style="stroke:black;fill:none" />`;
+        }
+        switch (this.props.kabel_locatie) {
+            case "Ondergronds":
+                mySVG.data += `<line x1="${cableLocationX+20}" x2="${cableLocationX+40}" y1="${mySVG.yup+12}" y2="${mySVG.yup+12}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+22}" x2="${cableLocationX+38}" y1="${mySVG.yup+15}" y2="${mySVG.yup+15}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+24}" x2="${cableLocationX+36}" y1="${mySVG.yup+18}" y2="${mySVG.yup+18}" style="stroke:black" />`;
+                break;
+            case "In wand":
+                mySVG.data += `<line x1="${cableLocationX+9.5}" x2="${cableLocationX+30.5}" y1="${mySVG.yup+10}" y2="${mySVG.yup+10}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+10}" x2="${cableLocationX+10}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+20}" x2="${cableLocationX+20}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+30}" x2="${cableLocationX+30}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+59.5}" x2="${cableLocationX+80.5}" y1="${mySVG.yup+10}" y2="${mySVG.yup+10}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+60}" x2="${cableLocationX+60}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+70}" x2="${cableLocationX+70}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+80}" x2="${cableLocationX+80}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`;
+                break;
+            case "Op wand":
+                mySVG.data += `<line x1="${cableLocationX+9.5}" x2="${cableLocationX+30.5}" y1="${mySVG.yup+20}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+10}" x2="${cableLocationX+10}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+20}" x2="${cableLocationX+20}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+30}" x2="${cableLocationX+30}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+59.5}" x2="${cableLocationX+80.5}" y1="${mySVG.yup+20}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+60}" x2="${cableLocationX+60}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+70}" x2="${cableLocationX+70}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`
+                           +  `<line x1="${cableLocationX+80}" x2="${cableLocationX+80}" y1="${mySVG.yup+10}" y2="${mySVG.yup+20}" style="stroke:black" />`;
+                break;
+            case "Luchtleiding":
+                mySVG.data += `<circle cx="${cableLocationX+60}" cy="${mySVG.yup+25}" r="4" style="stroke:black;fill:none" />`;
+                break;
+        }
+
         // Kabeltype en tekst rechts onderaan na de teller
-        mySVG.data += '<text x="' + (85+extrashift) + '" y="' + (mySVG.yup+40) 
+        mySVG.data += '<text x="' + (80+extrashift) + '" y="' + (mySVG.yup+40) 
                    + '" style="text-anchor:left" font-family="Arial, Helvetica, sans-serif" font-size="10">' 
                    + htmlspecialchars(this.props.type_kabel_na_teller) + '</text>';
 
@@ -512,14 +578,22 @@ export class Aansluiting extends Electro_Item {
             mySVG.ydown += 15;
         }
 
+        // Meerdere lijnen tekst onder de meter
+        let detailsWidth = 0;
+        if (trimString(this.props.details) !== "") detailsWidth = this.addLegendToSVG(mySVG, extrashift);
+
         // Naam onderaan zetten (links-onder)
-        mySVG.data += '<text x="' + (mySVG.xleft+(-6)) + '" ' + 'y="' + (mySVG.yup-10) + '" '
+        mySVG.data += '<text x="' + (mySVG.xleft+(-6)) + '" ' + 'y="' + (mySVG.yup-(cableLocationVisible?25:10)) + '" '
                 + 'style="text-anchor:end" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="12"'  + '>'
                 + htmlspecialchars(this.props.naam) + '</text>';
 
         // rework xleft and xright to ensure the entire structure is always at the right of a potential parent kring
         mySVG.xright = mySVG.xright + mySVG.xleft - 1;
         mySVG.xleft = 1;
+
+        let minimumRight = Math.max(5 + extrashift + detailsWidth,
+                                    45 + svgTextWidth(htmlspecialchars(this.props.type_kabel_na_teller)) + 35 + extrashift);
+        if (minimumRight > mySVG.xright) mySVG.xright = minimumRight;
 
         // Set newPage attribute if the property is true
         if (this.props.newPage) {

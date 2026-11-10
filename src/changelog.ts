@@ -1,4 +1,10 @@
 export const changelog = [
+  { date: "2026-08-14", msg: "Voor een Aansluiting en Elektriciteitsmeter kunnen nu ook meerdere lijnen tekst onder de meter worden getoond." },
+  { date: "2026-08-14", msg: "Een meerfasige leiding die een kookfornuis voedt kan nu ook met de juiste dwarsstrepen worden getekend." },
+  { date: "2026-04-08", msg: "Nieuw symbool: Omschakelaar, voor off-grid installaties." },
+  { date: "2026-03-22", msg: "Nieuw symbool: Klemmenstrook." },
+  { date: "2026-01-19", msg: 'Kabels van een aansluiting kunnen nu ook locatie-informatie krijgen ("Op Wand", ...).' },
+  { date: "2026-01-10", msg: "Omvormer is niet langer automatisch AC/DC, maar ook andere combinaties kunnen gekozen worden." },
   { date: "2025-09-18", msg: "Eerste stapjes om symbolen toe te voegen aan het situatieschema die niet in het ééndraadschema zitten." },
   { date: "2025-08-22", msg: "Aftakdoos kan nu meerdere kinderen bevatten." },
   { date: "2025-08-19", msg: "Kring en Aansluiting kennen nu ook de bescherming \"zekeringscheider\"." },
