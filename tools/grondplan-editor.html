@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Grondplan-editor – Kenny</title>
+<style>
+  :root { --bg:#f4f6f8; --panel:#fff; --line:#d7dde3; --accent:#1f6feb; --dark:#222; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Arial, Helvetica, sans-serif; background:var(--bg); color:#1b1f24; }
+  header { background:var(--panel); border-bottom:1px solid var(--line); padding:10px 14px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0 14px 0 0; font-weight:700; }
+  button, select, label.btn { border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 10px; font-size:13px; cursor:pointer; }
+  button:hover, label.btn:hover { border-color:#9db4cc; background:#f7faff; }
+  button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.danger { color:#b42318; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .sep { width:1px; height:26px; background:var(--line); margin:0 4px; }
+  main { display:flex; gap:14px; padding:14px; align-items:flex-start; }
+  #canvasWrap { background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,.06); padding:10px; overflow:auto; max-width:100%; }
+  #plan { display:block; background:#fff; touch-action:none; cursor:crosshair; }
+  aside { width:250px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; font-size:13px; line-height:1.45; }
+  aside h2 { font-size:14px; margin:0 0 8px; }
+  aside p { margin:6px 0; color:#4b5563; }
+  kbd { background:#eef2f6; border:1px solid #d7dde3; border-bottom-width:2px; border-radius:4px; padding:0 4px; font-size:11px; }
+  .hint { color:#6b7280; font-size:12px; }
+  .status { margin-left:auto; font-size:12px; color:#4b5563; }
+  .file { display:none; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Grondplan-editor</h1>
+  <label class="btn">Open .eds<input id="fileEds" class="file" type="file" accept=".eds"></label>
+  <button id="btnSaveEds" disabled>Opslaan .eds (alle pagina's)</button>
+  <button id="btnExportSvg" disabled>Export SVG</button>
+  <span class="sep"></span>
+  <label for="pageSelect" class="hint">Pagina</label>
+  <select id="pageSelect">
+    <option value="1">1 – gelijkvloers</option>
+    <option value="2">2 – eerste verdiep</option>
+    <option value="3">3 – tweede verdiep</option>
+    <option value="4">4 – kelder</option>
+    <option value="5">5 – bijgebouw</option>
+  </select>
+  <span class="sep"></span>
+  <button id="toolSelect" class="active" data-tool="select">Selecteren</button>
+  <button id="toolWall" data-tool="wall">Muur</button>
+  <button id="toolDoor" data-tool="door">Deur</button>
+  <button id="toolWindow" data-tool="window">Raam</button>
+  <button id="toolText" data-tool="text">Tekst</button>
+  <button id="toolDelete" data-tool="delete" class="danger">Verwijderen</button>
+  <span class="sep"></span>
+  <button id="btnUndo" disabled>↶ Undo</button>
+  <button id="btnRedo" disabled>↷ Redo</button>
+  <button id="btnGrid" class="active">Raster</button>
+  <span class="status" id="status">Open een .eds-bestand om te beginnen.</span>
+</header>
+
+<main>
+  <div id="canvasWrap"><svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <aside>
+    <h2>Zo werkt het</h2>
+    <p><b>Selecteren</b>: klik een muur of tekst en sleep om te verplaatsen. <kbd>Delete</kbd> verwijdert.</p>
+    <p><b>Muur</b>: sleep op het plan om een horizontale of verticale muur te tekenen.</p>
+    <p><b>Deur</b>: klik op een muur. Er wordt een opening van 70&nbsp;px gemaakt.</p>
+    <p><b>Raam</b>: klik op een muur. Er wordt een opening met glaslijn gemaakt.</p>
+    <p><b>Tekst</b>: klik op het plan om een label toe te voegen. Dubbelklik op een bestaande tekst om te wijzigen.</p>
+    <p class="hint">Alles wordt als rechthoeken en tekst opgeslagen, zodat de live eendraadschema-app het plan correct toont.</p>
+    <p class="hint">Na bewerken: <b>Opslaan .eds</b> en het bestand opnieuw openen in de online tool.</p>
+  </aside>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('plan');
+  const statusEl = document.getElementById('status');
+  const toastEl = document.getElementById('toast');
+  const pageSelect = document.getElementById('pageSelect');
+  const btnSaveEds = document.getElementById('btnSaveEds');
+  const btnExportSvg = document.getElementById('btnExportSvg');
+  const btnUndo = document.getElementById('btnUndo');
+  const btnRedo = document.getElementById('btnRedo');
+  const btnGrid = document.getElementById('btnGrid');
+
+  let edsObj = null;
+  let edsFilename = 'aangepast.eds';
+  let currentPage = 1;
+  let W = 1600, H = 720;
+
+  // model
+  let rects = [];   // {x,y,w,h,fill}
+  let texts = [];   // {x,y,size,weight,anchor,fill,content}
+  let selected = null; // {type:'rect'|'text', index}
+  let tool = 'select';
+  let grid = true;
+  let undoStack = [];
+  let redoStack = [];
+  let drag = null;
+  let dirty = false;
+
+  const PAGE_SIZES = {1:[1600,720], 2:[1280,600], 3:[1280,600], 4:[1280,600], 5:[1280,600]};
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  function updateDirtyStatus() {
+    if (!edsObj) return;
+    statusEl.textContent = `${edsFilename} – pagina ${currentPage} (${W}×${H})` +
+      (dirty ? ' – gewijzigd, nog niet opgeslagen' : ' – opgeslagen');
+  }
+
+  function snapshot() {
+    return JSON.stringify({rects, texts});
+  }
+
+  function pushUndo() {
+    undoStack.push(snapshot());
+    if (undoStack.length > 100) undoStack.shift();
+    redoStack = [];
+    dirty = true;
+    updateUndoButtons();
+    updateDirtyStatus();
+  }
+
+  function updateUndoButtons() {
+    btnUndo.disabled = undoStack.length === 0;
+    btnRedo.disabled = redoStack.length === 0;
+  }
+
+  function restore(snap) {
+    const o = JSON.parse(snap);
+    rects = o.rects; texts = o.texts;
+    selected = null;
+    render();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(snapshot());
+    restore(undoStack.pop());
+    dirty = true;
+    updateUndoButtons();
+    updateDirtyStatus();
+  }
+
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
+    dirty = true;
+    updateUndoButtons();
+    updateDirtyStatus();
+  }
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function render() {
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.innerHTML = '';
+
+    // grid
+    if (grid) {
+      const g = el('g', {opacity:'0.25'});
+      for (let x = 0; x <= W; x += 50) g.appendChild(el('line', {x1:x,y1:0,x2:x,y2:H,stroke:'#c9d3dd','stroke-width':1}));
+      for (let y = 0; y <= H; y += 50) g.appendChild(el('line', {x1:0,y1:y,x2:W,y2:y,stroke:'#c9d3dd','stroke-width':1}));
+      svg.appendChild(g);
+    }
+
+    // rects
+    rects.forEach((r, i) => {
+      const e = el('rect', {x:r.x, y:r.y, width:r.w, height:r.h, fill:r.fill});
+      e.dataset.index = i;
+      e.style.cursor = tool === 'select' ? 'move' : 'crosshair';
+      svg.appendChild(e);
+    });
+
+    // texts
+    texts.forEach((t, i) => {
+      const e = el('text', {x:t.x, y:t.y, 'font-family':'Arial, Helvetica, sans-serif',
+        'font-size':t.size, 'font-weight':t.weight, 'text-anchor':t.anchor, fill:t.fill});
+      e.textContent = t.content;
+      e.dataset.index = i;
+      e.style.cursor = tool === 'select' ? 'move' : 'crosshair';
+      svg.appendChild(e);
+    });
+
+    // selection
+    if (selected) {
+      if (selected.type === 'rect' && rects[selected.index]) {
+        const r = rects[selected.index];
+        svg.appendChild(el('rect', {x:r.x-2, y:r.y-2, width:r.w+4, height:r.h+4,
+          fill:'none', stroke:'#1f6feb', 'stroke-width':1.5, 'stroke-dasharray':'5,3'}));
+      } else if (selected.type === 'text' && texts[selected.index]) {
+        const t = texts[selected.index];
+        const e = el('text', {x:t.x, y:t.y, 'font-size':t.size, 'font-family':'Arial',
+          'text-anchor':t.anchor, fill:'none', stroke:'#1f6feb', 'stroke-width':.6});
+        e.textContent = t.content;
+        svg.appendChild(e);
+      }
+    }
+  }
+
+  function svgPoint(evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const m = svg.getScreenCTM();
+    const p = pt.matrixTransform(m.inverse());
+    return {x: Math.round(p.x), y: Math.round(p.y)};
+  }
+
+  function hitRect(p) {
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return i;
+    }
+    return -1;
+  }
+
+  function hitText(p) {
+    for (let i = texts.length - 1; i >= 0; i--) {
+      const t = texts[i];
+      const w = Math.max(20, t.content.length * t.size * 0.55);
+      const x0 = t.anchor === 'start' ? t.x : t.anchor === 'end' ? t.x - w : t.x - w/2;
+      if (p.x >= x0 && p.x <= x0 + w && p.y >= t.y - t.size && p.y <= t.y + 4) return i;
+    }
+    return -1;
+  }
+
+  function isWall(r) {
+    return (r.fill === '#222' || r.fill === '#000' || r.fill === 'black') &&
+           (Math.min(r.w, r.h) >= 6) && Math.max(r.w, r.h) >= 12;
+  }
+
+  function splitWall(index, p, opening) {
+    const r = rects[index];
+    if (!isWall(r)) { toast('Dit is geen muur.'); return; }
+    const horizontal = r.w >= r.h;
+    const gap = 70;
+    pushUndo();
+    if (horizontal) {
+      const start = Math.max(r.x, Math.min(p.x - gap/2, r.x + r.w - gap));
+      const end = start + gap;
+      rects.splice(index, 1);
+      if (start - r.x > 1) rects.push({x:r.x, y:r.y, w:start-r.x, h:r.h, fill:r.fill});
+      if (r.x + r.w - end > 1) rects.push({x:end, y:r.y, w:r.x+r.w-end, h:r.h, fill:r.fill});
+      if (opening === 'window') rects.push({x:start, y:r.y + r.h/2 - 1, w:gap, h:2, fill:'#555'});
+    } else {
+      const start = Math.max(r.y, Math.min(p.y - gap/2, r.y + r.h - gap));
+      const end = start + gap;
+      rects.splice(index, 1);
+      if (start - r.y > 1) rects.push({x:r.x, y:r.y, w:r.w, h:start-r.y, fill:r.fill});
+      if (r.y + r.h - end > 1) rects.push({x:r.x, y:end, w:r.w, h:r.y+r.h-end, fill:r.fill});
+      if (opening === 'window') rects.push({x:r.x + r.w/2 - 1, y:start, w:2, h:gap, fill:'#555'});
+    }
+    selected = null;
+    render();
+  }
+
+  svg.addEventListener('mousedown', (evt) => {
+    const p = svgPoint(evt);
+
+    if (tool === 'select') {
+      const ti = hitText(p);
+      if (ti >= 0) { selected = {type:'text', index:ti}; render(); drag = {type:'text', index:ti, start:p, orig:{...texts[ti]}}; return; }
+      const ri = hitRect(p);
+      if (ri >= 0) { selected = {type:'rect', index:ri}; render(); drag = {type:'rect', index:ri, start:p, orig:{...rects[ri]}}; return; }
+      selected = null; render(); return;
+    }
+
+    if (tool === 'delete') {
+      const ti = hitText(p);
+      if (ti >= 0) { pushUndo(); texts.splice(ti,1); selected=null; render(); toast('Tekst verwijderd'); return; }
+      const ri = hitRect(p);
+      if (ri >= 0) { pushUndo(); rects.splice(ri,1); selected=null; render(); toast('Element verwijderd'); return; }
+      return;
+    }
+
+    if (tool === 'door' || tool === 'window') {
+      const ri = hitRect(p);
+      if (ri >= 0) splitWall(ri, p, tool);
+      else toast('Klik op een muur.');
+      return;
+    }
+
+    if (tool === 'wall') {
+      drag = {type:'wall', start:p, current:p};
+      return;
+    }
+
+    if (tool === 'text') {
+      const s = prompt('Tekst:', 'Nieuwe tekst');
+      if (s) {
+        pushUndo();
+        texts.push({x:p.x, y:p.y, size:18, weight:'normal', anchor:'middle', fill:'#333', content:s});
+        render();
+      }
+      return;
+    }
+  });
+
+  svg.addEventListener('mousemove', (evt) => {
+    if (!drag) return;
+    const p = svgPoint(evt);
+
+    if (drag.type === 'rect') {
+      const r = rects[drag.index];
+      const dx = p.x - drag.start.x;
+      const dy = p.y - drag.start.y;
+      r.x = Math.round((drag.orig.x + dx)/5)*5;
+      r.y = Math.round((drag.orig.y + dy)/5)*5;
+      render();
+    } else if (drag.type === 'text') {
+      const t = texts[drag.index];
+      const dx = p.x - drag.start.x;
+      const dy = p.y - drag.start.y;
+      t.x = Math.round((drag.orig.x + dx)/5)*5;
+      t.y = Math.round((drag.orig.y + dy)/5)*5;
+      render();
+    } else if (drag.type === 'wall') {
+      drag.current = p;
+      render();
+      const a = drag.start, b = p;
+      if (Math.abs(b.x-a.x) >= Math.abs(b.y-a.y)) {
+        const x = Math.min(a.x,b.x), w = Math.abs(b.x-a.x);
+        svg.appendChild(el('rect', {x, y:a.y-4, width:w, height:8, fill:'#1f6feb', opacity:.5}));
+      } else {
+        const y = Math.min(a.y,b.y), h = Math.abs(b.y-a.y);
+        svg.appendChild(el('rect', {x:a.x-4, y, width:8, height:h, fill:'#1f6feb', opacity:.5}));
+      }
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!drag) return;
+    if (drag.type === 'wall') {
+      const a = drag.start, b = drag.current;
+      if (Math.abs(b.x-a.x) >= Math.abs(b.y-a.y) && Math.abs(b.x-a.x) >= 20) {
+        pushUndo();
+        rects.push({x:Math.min(a.x,b.x), y:a.y-4, w:Math.abs(b.x-a.x), h:8, fill:'#222'});
+      } else if (Math.abs(b.y-a.y) > Math.abs(b.x-a.x) && Math.abs(b.y-a.y) >= 20) {
+        pushUndo();
+        rects.push({x:a.x-4, y:Math.min(a.y,b.y), w:8, h:Math.abs(b.y-a.y), fill:'#222'});
+      }
+      render();
+    } else if (drag.type === 'rect' || drag.type === 'text') {
+      // push undo once at end if moved
+      const orig = drag.orig;
+      const cur = drag.type === 'rect' ? rects[drag.index] : texts[drag.index];
+      if (orig.x !== cur.x || orig.y !== cur.y) {
+        // put original back, push undo, then reapply
+        const dx = cur.x - orig.x, dy = cur.y - orig.y;
+        cur.x = orig.x; cur.y = orig.y;
+        pushUndo();
+        cur.x = orig.x + dx; cur.y = orig.y + dy;
+        render();
+      }
+    }
+    drag = null;
+  });
+
+  svg.addEventListener('dblclick', (evt) => {
+    if (tool !== 'select') return;
+    const p = svgPoint(evt);
+    const ti = hitText(p);
+    if (ti >= 0) {
+      const s = prompt('Tekst wijzigen:', texts[ti].content);
+      if (s !== null) { pushUndo(); texts[ti].content = s; render(); }
+    }
+  });
+
+  window.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Delete' || evt.key === 'Backspace') {
+      if (!selected) return;
+      if (evt.target && /INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+      pushUndo();
+      if (selected.type === 'rect') rects.splice(selected.index,1);
+      else texts.splice(selected.index,1);
+      selected = null; render(); evt.preventDefault();
+    }
+    if ((evt.ctrlKey || evt.metaKey) && evt.key.toLowerCase() === 'z') { undo(); evt.preventDefault(); }
+    if ((evt.ctrlKey || evt.metaKey) && evt.key.toLowerCase() === 'y') { redo(); evt.preventDefault(); }
+  });
+
+  // toolbar
+  function setTool(t) {
+    tool = t;
+    document.querySelectorAll('header button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+    svg.style.cursor = t === 'select' ? 'default' : t === 'text' ? 'text' : 'crosshair';
+  }
+  document.querySelectorAll('header button[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  btnUndo.addEventListener('click', undo);
+  btnRedo.addEventListener('click', redo);
+  btnGrid.addEventListener('click', () => { grid = !grid; btnGrid.classList.toggle('active', grid); render(); });
+
+  // parsing / building SVG
+  function parseSvg(svgText, w, h) {
+    W = w; H = h;
+    rects = []; texts = [];
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    doc.querySelectorAll('rect').forEach(r => {
+      rects.push({
+        x: parseFloat(r.getAttribute('x')||0),
+        y: parseFloat(r.getAttribute('y')||0),
+        w: parseFloat(r.getAttribute('width')||0),
+        h: parseFloat(r.getAttribute('height')||0),
+        fill: r.getAttribute('fill') || '#222'
+      });
+    });
+    doc.querySelectorAll('text').forEach(t => {
+      texts.push({
+        x: parseFloat(t.getAttribute('x')||0),
+        y: parseFloat(t.getAttribute('y')||0),
+        size: parseFloat(t.getAttribute('font-size')||18),
+        weight: t.getAttribute('font-weight')||'normal',
+        anchor: t.getAttribute('text-anchor')||'middle',
+        fill: t.getAttribute('fill')||'#333',
+        content: t.textContent || ''
+      });
+    });
+  }
+
+  function buildSvg() {
+    const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`];
+    rects.forEach(r => {
+      parts.push(`<rect x="${fmt(r.x)}" y="${fmt(r.y)}" width="${fmt(r.w)}" height="${fmt(r.h)}" fill="${r.fill}"/>`);
+    });
+    texts.forEach(t => {
+      parts.push(`<text x="${fmt(t.x)}" y="${fmt(t.y)}" font-family="Arial, Helvetica, sans-serif" font-size="${fmt(t.size)}" font-weight="${t.weight}" text-anchor="${t.anchor}" fill="${t.fill}">${escapeXml(t.content)}</text>`);
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function fmt(n) { return (Math.round(n*10)/10).toString(); }
+  function escapeXml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // .eds
+  async function deflateToBase64(bytes) {
+    const cs = new CompressionStream('deflate');
+    const stream = new Blob([bytes]).stream().pipeThrough(cs);
+    const buf = await new Response(stream).arrayBuffer();
+    const u8 = new Uint8Array(buf);
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < u8.length; i += chunk) bin += String.fromCharCode.apply(null, u8.subarray(i, i+chunk));
+    return btoa(bin);
+  }
+
+  async function inflateFromBase64(b64) {
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const ds = new DecompressionStream('deflate');
+    const stream = new Blob([u8]).stream().pipeThrough(ds);
+    const buf = await new Response(stream).arrayBuffer();
+    return new TextDecoder('utf-8').decode(buf);
+  }
+
+  function backgroundElement(page) {
+    return edsObj.sitplanjson.elements.find(e => e.page === page && e.electroItemId == null);
+  }
+
+  // Bewaar de huidige pagina in het eds-object. Wordt aangeroepen bij
+  // paginawissel en bij opslaan, zodat wijzigingen op alle pagina's
+  // bewaard blijven.
+  function commitCurrentPage() {
+    if (!edsObj) return;
+    const bg = backgroundElement(currentPage);
+    if (bg) {
+      bg.svg = buildSvg();
+      bg.sizex = W;
+      bg.sizey = H;
+    }
+  }
+
+  document.getElementById('fileEds').addEventListener('change', async (evt) => {
+    const f = evt.target.files[0];
+    if (!f) return;
+    edsFilename = f.name;
+    const text = await f.text();
+    if (!text.startsWith('EDS')) { toast('Geen EDS-bestand.'); return; }
+    try {
+      const jsonText = await inflateFromBase64(text.substring(10));
+      edsObj = JSON.parse(jsonText);
+      pageSelect.value = '1';
+      currentPage = 1;
+      dirty = false;
+      loadPage(1, false);
+      btnSaveEds.disabled = false;
+      btnExportSvg.disabled = false;
+      updateDirtyStatus();
+      toast('Bestand geladen');
+    } catch (e) {
+      console.error(e);
+      toast('Kon het bestand niet openen: ' + e.message);
+    }
+  });
+
+  function loadPage(page, commitPrevious = true) {
+    // Eerst de eventuele wijzigingen van de vorige pagina bewaren
+    if (commitPrevious && edsObj && page !== currentPage) commitCurrentPage();
+    currentPage = page;
+    pageSelect.value = String(page);
+    const bg = backgroundElement(page);
+    if (!bg) { toast('Geen achtergrond voor deze pagina.'); return; }
+    const [w,h] = PAGE_SIZES[page] || [bg.sizex, bg.sizey];
+    parseSvg(bg.svg || '<svg></svg>', w, h);
+    selected = null;
+    undoStack = []; redoStack = []; updateUndoButtons();
+    dirty = false;
+    render();
+    updateDirtyStatus();
+  }
+
+  pageSelect.addEventListener('change', () => {
+    const p = parseInt(pageSelect.value, 10);
+    if (!edsObj) { currentPage = p; return; }
+    loadPage(p);
+  });
+
+  btnExportSvg.addEventListener('click', () => {
+    const blob = new Blob([buildSvg()], {type:'image/svg+xml'});
+    downloadBlob(blob, `grondplan-pagina-${currentPage}.svg`);
+  });
+
+  btnSaveEds.addEventListener('click', async () => {
+    if (!edsObj) return;
+    // Bewaar de huidige pagina; vorige pagina's zijn al bewaard bij het wisselen
+    commitCurrentPage();
+    const jsonText = JSON.stringify(edsObj);
+    const b64 = await deflateToBase64(new TextEncoder().encode(jsonText));
+    const out = 'EDS0040000' + b64;
+    const name = edsFilename.replace(/\.eds$/i, '') + '-aangepast.eds';
+    downloadBlob(new Blob([out], {type:'application/eds'}), name);
+    dirty = false;
+    updateDirtyStatus();
+    toast('Opgeslagen: ' + name);
+    alert(
+      'Opgeslagen als:\n\n' + name + '\n\n' +
+      'Het ORIGINELE bestand is niet gewijzigd.\n' +
+      'Open het gedownloade bestand in de live tool en klik daarna op "Situatieschema".\n\n' +
+      'Alle 5 de pagina\'s zitten in dit bestand; de bewerkte pagina\'s zijn bijgewerkt.'
+    );
+  });
+
+  function downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  window.addEventListener('beforeunload', (evt) => {
+    if (dirty) {
+      evt.preventDefault();
+      evt.returnValue = '';
+    }
+  });
+
+  // start with an empty canvas
+  W = 1600; H = 720;
+  svg.setAttribute('viewBox', '0 0 1600 720');
+  svg.setAttribute('width', 1600);
+  svg.setAttribute('height', 720);
+  render();
+})();
+</script>
+</body>
+</html>
