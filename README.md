@@ -25,6 +25,15 @@ The "`index.html`"-file will still need all the resources in the root folder so 
 copied into the root-folder to get a working application.
 The default build configuration is only provided as an example.
 
+## Tools
+
+### Grondplan-editor
+
+`tools/grondplan-editor.html` is a standalone offline editor for the
+background floor plan of an `.eds` file. It lets you draw/move walls,
+doors, windows and labels, and saves an updated `.eds` without touching
+the electrical symbols. See `tools/README.md` for details.
+
 ## License
 
 See LICENSE.md
